@@ -1,0 +1,141 @@
+# OpenSees - OpenFresco
+#
+# ------------------------
+# RC column
+# 
+# Units: N, m, sec
+#
+# Written: yos
+# Date: Jan, 2012
+
+# ------------------------------
+# Start of model generation
+# ------------------------------
+
+# Create ModelBuilder (with two-dimensions and 3 DOF/node)
+model BasicBuilder -ndm 2 -ndf 3
+
+# Create nodes
+# ------------
+
+# Create RC nodes
+#    tag        X       Y
+node    1      0.0     0.0
+node    2      0.0     1.0
+
+set TopID 2
+
+# Define
+
+# Define nodal mass
+set Msup 10.1e3; # mass of superstructure (kg)
+#        tag    MX      MY      RZ
+mass  $TopID  $Msup   0.0    0.0
+
+# Define single point constraints
+#    tag   DX   DY   RZ
+
+fix 202   1     1     1
+
+# Define materials for nonlinear columns
+# ------------------------------------------
+# CONCRETE                  tag            f'c      ec0   f'cu       ecu
+# Core concrete (confined)
+set IDMatCore  1
+uniaxialMaterial Concrete01  $IDMatCore  -42.2e6  -0.0025  -15.02e6  -0.01081
+
+# Cover concrete (unconfined)
+set IDMatCover 2
+uniaxialMaterial Concrete01  $IDMatCover  -40.8e6  -0.0015  -15.2e6  -0.007
+
+# STEEL
+# Reinforcing steel
+set IDMatRebar 3
+set fy  394.0e6;      # Yield stress (N/m2) 394.0e6
+set E   210.0e9;       # Young's modulus (N/m2)
+#                         tag           fy E0    b
+uniaxialMaterial Steel02  $IDMatRebar  $fy $E 0.01 20.0 0.925 0.15 0.05 1.0 0.05 1.0
+
+# Define cross-section for nonlinear columns
+# ------------------------------------------
+
+# set some paramaters
+set Hcol    0.32;  # (m)
+set Bcol    0.32;  # (m)
+set CoverH  0.024;  # (m)
+set CoverB  0.024;  # (m)
+
+set As    71.33e-6;     # area of D10 (m2)
+
+set IDColSec   1
+
+# Source in a procedure for generating an RC fiber section
+source RCsectionnormal.tcl
+
+# Call the procedure to generate the column section
+#              id       h     b    coverH   coverB     core       cover      steel       nBars barArea nfCoreY nfCoreZ nfCover
+RCsection  $IDColSec $Hcol $Bcol $CoverH  $CoverB  $IDMatCore $IDMatCover $IDMatRebar     5    $As      10      10       10
+      
+
+# Define column elements
+# ----------------------
+set IDColGeom  1
+set IDPilGeom 2
+
+# Geometry of column elements
+#                        tag
+geomTransf Linear $IDColGeom
+geomTransf Linear $IDPilGeom
+
+# Number of integration points along length of element
+set np 3
+
+set A1 100.0
+set Iz1 100.0
+set E1 2.800e10
+
+# Create the coulumns using Beam-column elements
+#                      tag ndI ndJ nsecs   secID    transfTag
+
+element nonlinearBeamColumn 1 1 11 $np $IDColSec $IDColGeom
+#element elasticBeamColumn 1 1 11 6.174e-3 2.8e10 2.655e-5 $IDColGeom 
+element elasticBeamColumn 2 202 1 $A1 $E1 $Iz1 $IDPilGeom 
+#rigidLink beam 202 1
+
+# Define control points
+#---------------------------------
+# expControlPoint tag nodeTag dir resp <-fact f > <-lim l u>......
+expControlPoint 1 11 ux disp 
+expControlPoint 2 11 ux force
+#expControlPoint 2 11 ux disp ux force uy disp uy force uz disp uz force rx disp rx force ry disp ry force rz disp rz force
+
+# Define experimental control
+#------------------------------------
+# expControl SimDomain $tag -trialCP cpTags -outCP cpTags
+expControl SimDomain 1 -trialCP 1 -outCP 2
+
+
+
+# Define experimental setup
+# -------------------------
+# expSetup OneActuator $tag <-control $ctrlTag> $dir <-ctrlDispFact $f> ...
+expSetup OneActuator 1 -control 1 1 -sizeTrialOut 1 1
+#expSetup OneActuator 1 -control 1 1 -sizeTrialOut 1 1 -trialDispFact [expr $factDispPtoM] -outDispFact [expr 1.0/($factDispPtoM)] -outForceFact [expr 1.0/($factForcePtoM)] 
+
+# Define experimental site
+# ------------------------
+# expSite ActorSite $tag -setup $setupTag $ipPort <-ssl>
+expSite ActorSite 1 -setup 1 8090
+#------------------------------------
+# End of model generation
+#----------------------------------------
+
+#---------------------------------------
+# Start the server process
+#--------------------------------
+# startLabServer $siteTag
+startLabServer 1
+#----------------------------------
+# End of analysis
+#------------------------------------
+

@@ -1,0 +1,1 @@
+plot "< paste dspout.dat reaction.dat" using ($2):($4)
